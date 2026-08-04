@@ -1,0 +1,13 @@
+dataxid-profiling/
+dataxid-python/
+
+datasets/
+
+.commandcode/
+__pycache__/
+venv/
+env/
+.vscode/
+.idea/
+
+.env
