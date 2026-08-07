@@ -33,6 +33,8 @@ CPU: 13th Gen Intel Core i7-13650HX | RAM: 16 GB
 | 75M   | 66.9s   | 83.6s  | DataXID 1.2x |
 | 100M  | 111.1s  | 121.1s | DataXID 1.1x |
 
+![DataXID vs Zarque](benchmark_outputs/dataxid_vs_zarque.png)
+
 ### Colab — DataXID vs YData (Pandas)
 
 ```
@@ -47,6 +49,10 @@ CPU: Colab Cloud CPU | RAM: 83 GB
 | 50M   | 33.9s   | 286.5s         |
 | 75M   | 50.5s   | 465.1s         |
 | 100M  | 69.2s   | 577.0s         |
+
+![DataXID vs Pandas](benchmark_outputs/dataxid_vs_pandas.png)
+
+![DataXID vs Zarque](benchmark_outputs/dataxid_vs_pandas_ram.png)
 
 **Bulgular:**
 - **Local'de 16 GB RAM ile** Zarque ve DataXID 100M'yi sorunsuz tamamlıyor; Pandas 25M'de OOM veriyor
