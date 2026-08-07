@@ -1,14 +1,31 @@
-dataxid-profiling/
-dataxid-python/
-/zarque-profiling-main
-
-datasets/
-
-.commandcode/
-__pycache__/
+# Virtual environment
+.venv/
 venv/
 env/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+
+# IDE
 .vscode/
 .idea/
 
+# Command Code
+.commandcode/
+
+# Git submodules
+dataxid-profiling/
+dataxid-python/
+
+# Data (large files — add manually if needed)
+datasets/
+
+# Secrets
 .env
+
+# OS
+.DS_Store
+Thumbs.db
