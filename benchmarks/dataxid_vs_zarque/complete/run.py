@@ -1,121 +1,66 @@
-"""DataXID vs Zarque — Complete Mode Benchmark (süre + RAM)"""
+"""DataXID vs Zarque — Complete Mode Benchmark"""
 
-import time, gc, os, numpy as np, polars as pl, psutil
-from dataxid_profiling import ProfileReport as DX, ProfileConfig
-from zarque_profiling import ProfileReport as ZQ
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import platform
+import sys, os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 
-ROW_COUNTS = [100_000, 500_000, 1_000_000]
-dx_times, zq_times, dx_mems, zq_mems = [], [], [], []
+import gc
+import polars as pl
+from benchmarks.common import generate_synthetic_data, profile_dataxid, profile_zarque
+from benchmarks.common import plot_speed, plot_ram
+
+ROW_COUNTS = [100_000, 500_000, 1_000_000, 2_000_000]
+N_RUNS = 3
 
 print("=" * 55)
 print("  DataXID vs Zarque — COMPLETE Mode Benchmark")
+print("  (Korelasyon + Etkileşim + Karakter Analizi dahil)")
 print("=" * 55)
 
-
-def gen(n_rows, seed=42):
-    rng = np.random.default_rng(seed)
-    d = {}
-    for i in range(5):
-        d[f"num_col_{i}"] = rng.standard_normal(n_rows).astype(np.float32)
-    for i in range(3):
-        d[f"cat_col_{i}"] = rng.choice(["A","B","C","D"], n_rows).tolist()
-    for i in range(2):
-        d[f"bool_col_{i}"] = rng.choice([True,False], n_rows).tolist()
-    return pl.DataFrame(d)
-
-
-def mem():
-    return psutil.Process(os.getpid()).memory_info().rss / (1024*1024)
-
+dx_times, dx_time_errs = [], []
+zq_times, zq_time_errs = [], []
+dx_mems, dx_mem_errs = [], []
+zq_mems, zq_mem_errs = [], []
 
 for rows in ROW_COUNTS:
-    df = gen(rows)
+    data_dict = generate_synthetic_data(rows, backend="polars")
+    df = pl.DataFrame(data_dict)
     print(f"\n[+] {rows:,} satır, {df.estimated_size('mb'):.1f} MB")
 
-    # DataXID
-    print(f"  DX...", end=" ")
-    mb = mem(); t0 = time.perf_counter()
-    dx = DX(df, config=ProfileConfig(title=f"DX {rows}", mode="complete"))
-    dx.to_dict()
-    t_dx = time.perf_counter() - t0
-    m_dx = max(0, mem() - mb)
-    print(f"{t_dx:.1f}s / {m_dx:.0f}MB")
+    print(f"--> DataXID COMPLETE...")
+    t_avg, t_std, m_avg, m_std = profile_dataxid(df, mode="complete", n_runs=N_RUNS)
+    dx_times.append(t_avg); dx_time_errs.append(t_std)
+    dx_mems.append(m_avg); dx_mem_errs.append(m_std)
+    print(f"    {t_avg:.1f}s ± {t_std:.1f} | {m_avg:.1f}MB ± {m_std:.1f}")
 
-    # Zarque
-    print(f"  ZQ...", end=" ")
-    mb = mem(); t0 = time.perf_counter()
-    try:
-        zq = ZQ(df, minimal=False, title=f"ZQ {rows}")
-        zq.get_description()
-        t_zq = time.perf_counter() - t0
-        m_zq = max(0, mem() - mb)
-        print(f"{t_zq:.1f}s / {m_zq:.0f}MB")
-    except Exception as e:
-        print(f"CRASH: {str(e)[:80]}")
-        t_zq = 0; m_zq = 0
+    print(f"--> Zarque COMPLETE...")
+    t_avg, t_std, m_avg, m_std = profile_zarque(df, mode="complete", n_runs=N_RUNS)
+    zq_times.append(t_avg); zq_time_errs.append(t_std)
+    zq_mems.append(m_avg); zq_mem_errs.append(m_std)
+    if t_avg > 0:
+        print(f"    {t_avg:.1f}s ± {t_std:.1f} | {m_avg:.1f}MB ± {m_std:.1f}")
+    else:
+        print(f"    CRASHED")
 
-    dx_times.append(t_dx); zq_times.append(t_zq)
-    dx_mems.append(m_dx); zq_mems.append(m_zq)
-    del df, dx; gc.collect()
+    del df; gc.collect()
 
 # Özet
-print("\n" + "=" * 60)
-print(f"{'Satır':>10} {'DX Süre':>8} {'ZQ Süre':>8} {'DX RAM':>8} {'ZQ RAM':>8}")
-print("-" * 60)
-for r, dt, zt, dm, zm in zip(ROW_COUNTS, dx_times, zq_times, dx_mems, zq_mems):
-    print(f"{r:>10,} {dt:>7.1f}s {zt:>7.1f}s {dm:>7.0f}M {zm:>7.0f}M")
+print("\n" + "=" * 75)
+print(f"{'Satır':>12}  {'DX Süre':>12}  {'ZQ Süre':>12}  {'DX RAM':>12}  {'ZQ RAM':>12}")
+print("-" * 75)
+for i, rows in enumerate(ROW_COUNTS):
+    print(f"{rows:>12,}  {dx_times[i]:>8.1f}s±{dx_time_errs[i]:.1f}  {zq_times[i]:>8.1f}s±{zq_time_errs[i]:.1f}  {dx_mems[i]:>8.1f}M±{dx_mem_errs[i]:.1f}  {zq_mems[i]:>8.1f}M±{zq_mem_errs[i]:.1f}")
+print("=" * 75)
 
-# ----- Grafik -----
-def lbl(n):
-    if n < 1_000_000: return f"{n//1000}K"
-    return f"{n//1_000_000}M"
+# Grafikler
+speed_data = {
+    "DataXID": (dx_times, dx_time_errs),
+    "Zarque": (zq_times, zq_time_errs),
+}
+ram_data = {
+    "DataXID": (dx_mems, dx_mem_errs),
+    "Zarque": (zq_mems, zq_mem_errs),
+}
 
-labels = [lbl(r) for r in ROW_COUNTS]
-x = np.arange(len(labels)); w = 0.35
-
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-
-# Speed
-r1 = ax1.bar(x - w/2, dx_times, w, label="DataXID (Polars-native)", color="#4472C4")
-r2 = ax1.bar(x + w/2, zq_times, w, label="Zarque (Polars-adapted)", color="#ED7D31")
-ax1.set_ylabel("Süre (saniye)", fontweight="bold")
-ax1.set_xlabel("Satır Sayısı", fontweight="bold")
-ax1.set_title("DataXID vs Zarque — Complete Mode Hız", fontweight="bold", fontsize=12)
-ax1.set_xticks(x); ax1.set_xticklabels(labels)
-ax1.legend(loc="upper left", frameon=False); ax1.grid(axis="y", alpha=0.3)
-ax1.bar_label(r1, padding=3, fmt="%.1f")
-for rect in r2:
-    h = rect.get_height()
-    lbl_txt = "CRASHED" if h == 0 else f"{h:.1f}"
-    c = "red" if h == 0 else "black"
-    ax1.annotate(lbl_txt, xy=(rect.get_x()+rect.get_width()/2, h),
-                  xytext=(0, 3), textcoords="offset points", ha="center", va="bottom",
-                  color=c, fontweight="bold" if h==0 else "normal")
-
-# RAM
-r3 = ax2.bar(x - w/2, dx_mems, w, label="DataXID", color="#70AD47")
-r4 = ax2.bar(x + w/2, zq_mems, w, label="Zarque", color="#FFC000")
-ax2.set_ylabel("RAM (MB)", fontweight="bold")
-ax2.set_xlabel("Satır Sayısı", fontweight="bold")
-ax2.set_title("DataXID vs Zarque — Complete Mode RAM", fontweight="bold", fontsize=12)
-ax2.set_xticks(x); ax2.set_xticklabels(labels)
-ax2.legend(loc="upper left", frameon=False); ax2.grid(axis="y", alpha=0.3)
-ax2.bar_label(r3, padding=3, fmt="%.0f")
-for rect in r4:
-    h = rect.get_height()
-    c = "red" if h == 0 else "black"
-    ax2.annotate("CRASHED" if h==0 else f"{h:.0f}",
-                  xy=(rect.get_x()+rect.get_width()/2, h),
-                  xytext=(0, 3), textcoords="offset points", ha="center", va="bottom",
-                  color=c, fontweight="bold" if h==0 else "normal")
-
-cpu = platform.processor() or "Unknown"; ram_gb = round(psutil.virtual_memory().total/(1024**3))
-plt.figtext(0.5, 0.01, f"{cpu} | {ram_gb} GB RAM | Complete Mode", ha="center", fontsize=9)
-plt.tight_layout(rect=[0, 0.04, 1, 1])
-plt.savefig("dx_vs_zq_complete.png", dpi=300)
-plt.close()
-print("\ndx_vs_zq_complete.png kaydedildi.")
+plot_speed(speed_data, ROW_COUNTS, title_suffix="Complete Mode")
+plot_ram(ram_data, ROW_COUNTS, title_suffix="Complete Mode")
+print("\nComplete mode benchmark tamamlandı.")

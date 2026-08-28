@@ -10,9 +10,12 @@ authors = [{ name = "Elif", email = "" }]
 dependencies = [
     "dataxid-profiling",
     "zarque-profiling",
+    "ydata-profiling",
     "polars>=1.0",
+    "pandas",
     "matplotlib>=3.7",
     "numpy>=1.21",
+    "psutil",
     "jupyter>=1.0",
     "ipykernel>=6.0",
 ]
